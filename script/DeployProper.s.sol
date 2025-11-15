@@ -1,0 +1,69 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.24;
+
+import {Script, console} from "forge-std/Script.sol";
+import {InsurancePool} from "../src/InsurancePool.sol";
+import {PolicyManager} from "../src/PolicyManager.sol";
+import {LuminaOracle} from "../src/LuminaOracle.sol";
+
+/// @title Proper Deployment Script
+/// @notice Two-step deployment to handle circular dependency
+contract DeployProperScript is Script {
+    function run() external {
+        uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
+        address assetToken = vm.envAddress("ASSET_TOKEN");
+
+        vm.startBroadcast(deployerPrivateKey);
+
+        // Step 1: Deploy Oracle
+        LuminaOracle oracle = new LuminaOracle();
+        console.log("1. Oracle deployed:", address(oracle));
+
+        // Step 2: Calculate future PolicyManager address
+        // This uses CREATE opcode address prediction
+        address deployer = vm.addr(deployerPrivateKey);
+        uint256 nonce = vm.getNonce(deployer);
+        
+        // PolicyManager will be deployed at nonce + 2 (after pool deployment)
+        address predictedPolicyManager = computeCreateAddress(deployer, nonce + 1);
+        console.log("2. Predicted PolicyManager address:", predictedPolicyManager);
+
+        // Step 3: Deploy Pool with predicted address
+        InsurancePool pool = new InsurancePool(assetToken, predictedPolicyManager);
+        console.log("3. Pool deployed:", address(pool));
+
+        // Step 4: Deploy PolicyManager (should match predicted address)
+        PolicyManager policyManager = new PolicyManager(
+            assetToken,
+            address(pool),
+            address(oracle)
+        );
+        console.log("4. PolicyManager deployed:", address(policyManager));
+
+        // Verify addresses match
+        require(
+            address(policyManager) == predictedPolicyManager,
+            "PolicyManager address mismatch!"
+        );
+
+        vm.stopBroadcast();
+
+        // Log final addresses
+        console.log("\n=== Deployment Complete ===");
+        console.log("Oracle:", address(oracle));
+        console.log("Pool:", address(pool));
+        console.log("PolicyManager:", address(policyManager));
+        console.log("Asset Token:", assetToken);
+        console.log("\nAll contracts properly linked!");
+    }
+
+    // Helper function to compute CREATE address
+    function computeCreateAddress(address deployer, uint256 nonce) internal pure override returns (address) {
+        if (nonce == 0x00) return address(uint160(uint256(keccak256(abi.encodePacked(bytes1(0xd6), bytes1(0x94), deployer, bytes1(0x80))))));
+        if (nonce <= 0x7f) return address(uint160(uint256(keccak256(abi.encodePacked(bytes1(0xd6), bytes1(0x94), deployer, uint8(nonce))))));
+        if (nonce <= 0xff) return address(uint160(uint256(keccak256(abi.encodePacked(bytes1(0xd7), bytes1(0x94), deployer, bytes1(0x81), uint8(nonce))))));
+        if (nonce <= 0xffff) return address(uint160(uint256(keccak256(abi.encodePacked(bytes1(0xd8), bytes1(0x94), deployer, bytes1(0x82), uint16(nonce))))));
+        if (nonce <= 0xffffff) return address(uint160(uint256(keccak256(abi.encodePacked(bytes1(0xd9), bytes1(0x94), deployer, bytes1(0x83), uint24(nonce))))));
+        return address(uint160(uint256(keccak256(abi.encodePacked(bytes1(0xda), bytes1(0x94), deployer, bytes1(0x84), uint32(nonce))))));
+    }
+}

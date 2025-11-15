@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import {Test, console} from "forge-std/Test.sol";
 import {InsurancePool} from "../src/InsurancePool.sol";
+import {IInsurancePool} from "../src/interfaces/IInsurancePool.sol";
 import {MockERC20} from "./mocks/MockERC20.sol";
 
 contract InsurancePoolTest is Test {
@@ -21,6 +22,9 @@ contract InsurancePoolTest is Test {
 
         asset.mint(alice, INITIAL_BALANCE);
         asset.mint(bob, INITIAL_BALANCE);
+        
+        // Mint to this contract for initial liquidity
+        asset.mint(address(this), INITIAL_BALANCE);
     }
 
     function testDeposit() public {
@@ -72,7 +76,7 @@ contract InsurancePoolTest is Test {
         asset.approve(address(pool), depositAmount);
         uint256 shares = pool.deposit(depositAmount);
         
-        vm.expectRevert("Insufficient shares");
+        vm.expectRevert("Not enough shares");
         pool.withdraw(shares + 1);
         vm.stopPrank();
     }

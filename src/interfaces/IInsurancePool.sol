@@ -36,4 +36,5 @@ interface IInsurancePool {
     function getPoolInfo() external view returns (PoolInfo memory);
     function getProviderInfo(address provider) external view returns (ProviderInfo memory);
     function calculateShareValue() external view returns (uint256);
+    function canCoverPolicy(uint256 coverageAmount) external view returns (bool);
 }

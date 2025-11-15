@@ -13,12 +13,13 @@ contract DeployScript is Script {
 
         vm.startBroadcast(deployerPrivateKey);
 
-        // Deploy Oracle
+        // Deploy Oracle first
         LuminaOracle oracle = new LuminaOracle();
         console.log("Oracle deployed at:", address(oracle));
 
-        // Deploy Insurance Pool (placeholder for policy manager)
-        InsurancePool pool = new InsurancePool(assetToken, address(0));
+        // Deploy Insurance Pool with deployer as temporary policy manager
+        // We'll transfer control after PolicyManager is deployed
+        InsurancePool pool = new InsurancePool(assetToken, msg.sender);
         console.log("Pool deployed at:", address(pool));
 
         // Deploy Policy Manager
@@ -29,8 +30,13 @@ contract DeployScript is Script {
         );
         console.log("PolicyManager deployed at:", address(policyManager));
 
-        // Update pool with policy manager address (requires pool upgrade or setter)
-        // Note: In production, use upgradeable pattern or deploy in correct order
+        // Note: In production, you would need to:
+        // 1. Make InsurancePool upgradeable, OR
+        // 2. Add a setPolicyManager() function with onlyOwner, OR
+        // 3. Redeploy pool with correct policy manager address
+        
+        // For now, pool accepts calls from deployer (msg.sender)
+        // You'll need to manually update this or redeploy
 
         vm.stopBroadcast();
 
@@ -40,5 +46,7 @@ contract DeployScript is Script {
         console.log("Pool:", address(pool));
         console.log("PolicyManager:", address(policyManager));
         console.log("Asset Token:", assetToken);
+        console.log("\nWARNING: Pool's policyManager is set to deployer");
+        console.log("You may need to redeploy pool with PolicyManager address");
     }
 }
