@@ -23,7 +23,7 @@ contract IntegrationTest is Test {
     function setUp() public {
         // Deploy contracts
         asset = new MockERC20("USDT", "USDT");
-        oracle = new LuminaOracle();
+        oracle = new LuminaOracle(address(asset));
         
         // Calculate future PolicyManager address
         address predictedPolicyManager = computeCreateAddress(address(this), vm.getNonce(address(this)) + 1);

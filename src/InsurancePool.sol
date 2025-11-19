@@ -29,6 +29,22 @@ contract InsurancePool is IInsurancePool, ReentrancyGuard {
         _;
     }
 
+    bool public paused;
+    address public owner;
+    
+    event EmergencyPause(address indexed by);
+    event EmergencyUnpause(address indexed by);
+    
+    modifier whenNotPaused() {
+        require(!paused, "Pool paused");
+        _;
+    }
+    
+    modifier onlyOwner() {
+        require(msg.sender == owner, "Not owner");
+        _;
+    }
+
     constructor(address _asset, address _policyManager) {
         require(_asset != address(0), "Invalid asset");
         require(_policyManager != address(0), "Invalid policy manager");
@@ -36,9 +52,23 @@ contract InsurancePool is IInsurancePool, ReentrancyGuard {
         asset = IERC20(_asset);
         policyManager = _policyManager;
         poolInfo.isActive = true;
+        owner = msg.sender;
+        paused = false;
+    }
+    
+    function emergencyPause() external onlyOwner {
+        paused = true;
+        poolInfo.isActive = false;
+        emit EmergencyPause(msg.sender);
+    }
+    
+    function emergencyUnpause() external onlyOwner {
+        paused = false;
+        poolInfo.isActive = true;
+        emit EmergencyUnpause(msg.sender);
     }
 
-    function deposit(uint256 amount) external nonReentrant returns (uint256 shares) {
+    function deposit(uint256 amount) external nonReentrant whenNotPaused returns (uint256 shares) {
         if (!poolInfo.isActive) revert("Pool not active");
         if (amount == 0) revert("Cannot deposit zero");
 
@@ -67,7 +97,7 @@ contract InsurancePool is IInsurancePool, ReentrancyGuard {
         emit LiquidityDeposited(msg.sender, amount, shares);
     }
 
-    function withdraw(uint256 shares) external nonReentrant returns (uint256 amount) {
+    function withdraw(uint256 shares) external nonReentrant whenNotPaused returns (uint256 amount) {
         if (shares == 0) revert("Cannot withdraw zero");
         
         ProviderInfo storage provider = providers[msg.sender];
@@ -93,7 +123,7 @@ contract InsurancePool is IInsurancePool, ReentrancyGuard {
         emit LiquidityWithdrawn(msg.sender, amount, shares);
     }
 
-    function collectPremium(uint256 policyId, uint256 amount) external onlyPolicyManager {
+    function collectPremium(uint256 policyId, uint256 amount) external onlyPolicyManager whenNotPaused {
         if (amount == 0) revert("Zero premium");
 
         // Premiums increase pool value, benefiting all LPs

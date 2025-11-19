@@ -30,4 +30,8 @@ interface ILuminaOracle {
     function getMarketOutcome(string calldata marketId) external view returns (MarketOutcome memory);
     function isMarketResolved(string calldata marketId) external view returns (bool);
     function verifyOutcome(string calldata marketId, bytes32 expectedOutcome) external view returns (bool);
+    
+    // Prediction market support
+    function getRiskAssessment(string calldata protocol) external view returns (uint256 riskScore, uint256 confidence, uint256 timestamp);
+    function assessProtocolRisk(string calldata protocol) external view returns (uint256);
 }

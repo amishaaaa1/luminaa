@@ -1,0 +1,106 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+import "@openzeppelin/contracts/access/Ownable.sol";
+
+/**
+ * @title MultiAIOracle
+ * @notice Multi-AI consensus oracle with sequential fallback
+ * @dev Supports 5 AI providers with 80% consensus requirement
+ */
+contract MultiAIOracle is Ownable {
+    
+    enum AIProvider {
+        Gemini,      // Google AI Studio
+        Llama,       // Groq
+        Mistral,     // OpenRouter
+        GPT4,        // OpenAI
+        Claude       // Anthropic
+    }
+
+    struct AIResponse {
+        AIProvider provider;
+        uint256 riskScore;
+        uint256 confidence;
+        uint256 timestamp;
+        bool responded;
+    }
+
+    struct ConsensusResult {
+        uint256 finalScore;
+        uint256 avgConfidence;
+        uint256 agreementRate;
+        bool consensusReached;
+        uint256 respondedCount;
+    }
+
+    // Market ID => AI Provider => Response
+    mapping(uint256 => mapping(AIProvider => AIResponse)) public responses;
+    mapping(uint256 => ConsensusResult) public consensusResults;
+    
+    // Authorized backend addresses that can submit AI responses
+    mapping(address => bool) public authorizedReporters;
+    
+    uint256 public constant CONSENSUS_THRESHOLD = 80; // 80% agreement required
+    uint256 public constant MIN_RESPONSES = 3; // Minimum 3 AI responses
+    
+    event AIResponseSubmitted(
+        uint256 indexed marketId,
+        AIProvider provider,
+        uint256 riskScore,
+        uint256 confidence
+    );
+    
+    event ConsensusReached(
+        uint256 indexed marketId,
+        uint256 finalScore,
+        uint256 agreementRate,
+        uint256 respondedCount
+    );
+    
+    event ConsensusFailedRefund(
+        uint256 indexed marketId,
+        uint256 agreementRate
+    );
+
+    constructor() Ownable(msg.sender) {}
+
+    /**
+     * @notice Submit AI response for a market
+     * @param marketId Market identifier
+     * @param provider AI provider enum
+     * @param riskScore Risk score (0-100)
+     * @param confidence Confidence level (0-100)
+     */
+    function submitAIResponse(
+        uint256 marketId,
+        AIProvider provider,
+        uint256 riskScore,
+        uint256 confidence
+    ) external {
+        require(authorizedReporters[msg.sender], "Not authorized");
+        require(riskScore <= 100, "Invalid risk score");
+        require(confidence <= 100, "Invalid confidence");
+        require(!responses[marketId][provider].responded, "Already responded");
+
+        responses[marketId][provider] = AIResponse({
+            provider: provider,
+            riskScore: riskScore,
+            confidence: confidence,
+            timestamp: block.timestamp,
+            responded: true
+        });
+
+        emit AIResponseSubmitted(marketId, provider, riskScore, confidence);
+    }
+
+    /**
+     * @notice Calculate consensus from all AI responses
+     * @param marketId Market identifier
+     * @return ConsensusResult struct with final score and agreement rate
+     */
+    function calculateConsensus(uint256 marketId) 
+        external 
+        returns (ConsensusResult memory) 
+    {
+        require(authorizedReporters[msg.sender], "Not authorized");

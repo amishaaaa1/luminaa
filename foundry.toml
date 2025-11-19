@@ -6,13 +6,17 @@ solc_version = "0.8.24"
 optimizer = true
 optimizer_runs = 200
 via_ir = false
+remappings = [
+    "@chainlink/contracts/=lib/chainlink-brownie-contracts/contracts/",
+    "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/"
+]
 
 [rpc_endpoints]
 bnb_testnet = "https://data-seed-prebsc-1-s1.binance.org:8545"
 bnb_mainnet = "https://bsc-dataseed.binance.org"
 
 [etherscan]
-bnb_testnet = { key = "${BSCSCAN_API_KEY}" }
-bnb_mainnet = { key = "${BSCSCAN_API_KEY}" }
+bnb_testnet = { key = "${BSCSCAN_API_KEY}", url = "https://api-testnet.bscscan.com/api" }
+bnb_mainnet = { key = "${BSCSCAN_API_KEY}", url = "https://api.bscscan.com/api" }
 
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options

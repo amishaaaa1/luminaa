@@ -16,7 +16,7 @@ contract DeployProperScript is Script {
         vm.startBroadcast(deployerPrivateKey);
 
         // Step 1: Deploy Oracle
-        LuminaOracle oracle = new LuminaOracle();
+        LuminaOracle oracle = new LuminaOracle(assetToken);
         console.log("1. Oracle deployed:", address(oracle));
 
         // Step 2: Calculate future PolicyManager address

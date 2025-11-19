@@ -4,6 +4,7 @@ pragma solidity ^0.8.24;
 import {Test, console} from "forge-std/Test.sol";
 import {LuminaOracle} from "../src/LuminaOracle.sol";
 import {ILuminaOracle} from "../src/interfaces/ILuminaOracle.sol";
+import {MockERC20} from "./mocks/MockERC20.sol";
 
 contract LuminaOracleTest is Test {
     LuminaOracle public oracle;
@@ -14,7 +15,9 @@ contract LuminaOracleTest is Test {
 
     function setUp() public {
         owner = address(this);
-        oracle = new LuminaOracle();
+        // Deploy mock token for bond
+        MockERC20 bondToken = new MockERC20("Bond Token", "BOND");
+        oracle = new LuminaOracle(address(bondToken));
         oracle.addResolver(resolver);
     }
 
