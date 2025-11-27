@@ -32,6 +32,7 @@ interface IInsurancePool {
     function deposit(uint256 amount) external returns (uint256 shares);
     function withdraw(uint256 shares) external returns (uint256 amount);
     function collectPremium(uint256 policyId, uint256 amount) external;
+    function collectPremiumDirect(uint256 policyId, uint256 amount) external;
     function payClaim(uint256 policyId, address beneficiary, uint256 amount) external;
     function getPoolInfo() external view returns (PoolInfo memory);
     function getProviderInfo(address provider) external view returns (ProviderInfo memory);

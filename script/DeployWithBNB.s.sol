@@ -37,6 +37,15 @@ contract DeployWithBNB is Script {
         );
         console.log("PolicyManager deployed at:", address(policyManager));
 
+        // Add initial liquidity to pool (100,000 USDT)
+        uint256 initialLiquidity = 100_000 * 1e18;
+        usdt.mint(msg.sender, initialLiquidity);
+        console.log("Minted initial liquidity:", initialLiquidity);
+        
+        usdt.approve(address(pool), initialLiquidity);
+        uint256 shares = pool.deposit(initialLiquidity);
+        console.log("Deposited liquidity, received shares:", shares);
+
         vm.stopBroadcast();
 
         console.log("\n=== Deployment Summary ===");
@@ -44,6 +53,9 @@ contract DeployWithBNB is Script {
         console.log("Oracle:", address(oracle));
         console.log("Pool:", address(pool));
         console.log("PolicyManager:", address(policyManager));
+        console.log("\n=== Initial Liquidity ===");
+        console.log("Amount: 100,000 USDT");
+        console.log("Shares:", shares);
         console.log("\nUpdate your .env with these addresses!");
     }
 }

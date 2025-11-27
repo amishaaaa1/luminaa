@@ -89,6 +89,31 @@ contract PolicyManager is IPolicyManager, ERC721, ReentrancyGuard {
         uint256 premium,
         uint256 duration
     ) external payable nonReentrant whenNotPaused returns (uint256 policyId) {
+        // Basic validation
+        _validatePolicyParams(holder, marketId, coverageAmount, duration);
+        
+        // Check limits and liquidity
+        _checkLimitsAndLiquidity(holder, marketId, coverageAmount, premium);
+
+        // Create policy
+        policyId = ++policyCounter;
+        _createPolicyRecord(policyId, holder, marketId, coverageAmount, premium, duration);
+
+        // Mint NFT
+        _safeMint(holder, policyId);
+
+        // Handle payment
+        _handlePayment(policyId, premium);
+
+        emit PolicyCreated(policyId, holder, marketId, coverageAmount, premium);
+    }
+
+    function _validatePolicyParams(
+        address holder,
+        string calldata marketId,
+        uint256 coverageAmount,
+        uint256 duration
+    ) private pure {
         if (holder == address(0)) revert("Invalid holder");
         if (bytes(marketId).length == 0) revert("Need market ID");
         if (coverageAmount < MIN_COVERAGE || coverageAmount > MAX_COVERAGE) {
@@ -97,8 +122,18 @@ contract PolicyManager is IPolicyManager, ERC721, ReentrancyGuard {
         if (duration < MIN_DURATION || duration > MAX_DURATION) {
             revert("Duration out of range");
         }
+    }
 
-        // LUMINA RISK MANAGEMENT: Check concentration limits
+    function _checkLimitsAndLiquidity(
+        address holder,
+        string calldata marketId,
+        uint256 coverageAmount,
+        uint256 premium
+    ) private {
+        // Check pool liquidity
+        if (!pool.canCoverPolicy(coverageAmount)) revert("Pool can't cover this");
+
+        // Check concentration limits
         IInsurancePool.PoolInfo memory poolInfo = pool.getPoolInfo();
         uint256 maxMarketExposure = (poolInfo.totalLiquidity * MAX_MARKET_EXPOSURE_PCT) / BASIS_POINTS;
         uint256 maxUserCoverage = (poolInfo.totalLiquidity * MAX_USER_COVERAGE_PCT) / BASIS_POINTS;
@@ -106,23 +141,26 @@ contract PolicyManager is IPolicyManager, ERC721, ReentrancyGuard {
         require(marketExposure[marketId] + coverageAmount <= maxMarketExposure, "Market exposure limit");
         require(userTotalCoverage[holder] + coverageAmount <= maxUserCoverage, "User coverage limit");
 
-        // Check if pool has enough liquidity
-        if (!pool.canCoverPolicy(coverageAmount)) revert("Pool can't cover this");
-
-        // Make sure premium is enough (with slippage protection)
+        // Validate premium
         uint256 calculatedPremium = calculatePremium(marketId, coverageAmount);
         if (premium < calculatedPremium) revert("Premium too low");
         
-        // Verify premium is sufficient for sustainability
         uint256 riskScore = marketRiskScores[marketId];
-        if (riskScore == 0) riskScore = 5000; // default 50%
+        if (riskScore == 0) riskScore = 5000;
         require(
             PremiumCalculator.isPremiumSufficient(premium, coverageAmount, riskScore),
             "Premium insufficient for risk"
         );
+    }
 
-        policyId = ++policyCounter;
-
+    function _createPolicyRecord(
+        uint256 policyId,
+        address holder,
+        string calldata marketId,
+        uint256 coverageAmount,
+        uint256 premium,
+        uint256 duration
+    ) private {
         policies[policyId] = Policy({
             id: policyId,
             holder: holder,
@@ -136,31 +174,20 @@ contract PolicyManager is IPolicyManager, ERC721, ReentrancyGuard {
         });
 
         userPolicies[holder].push(policyId);
-        
-        // Update exposure tracking
         marketExposure[marketId] += coverageAmount;
         userTotalCoverage[holder] += coverageAmount;
+    }
 
-        // Mint policy NFT
-        _safeMint(holder, policyId);
-
-        // Handle payment: BNB or USDT
+    function _handlePayment(uint256 policyId, uint256 premium) private {
         if (msg.value > 0) {
-            // BNB payment (TESTNET ONLY)
-            // Verify BNB amount is sufficient
+            // BNB payment
             require(msg.value >= premium, "Insufficient BNB sent");
             
-            // Accept BNB and mint equivalent USDT for the pool
-            // This works because MockUSDT has a public mint function
+            // Mint USDT to pool
+            IMockUSDT(address(asset)).mint(address(pool), premium);
+            pool.collectPremiumDirect(policyId, premium);
             
-            // Mint USDT to this contract first
-            IMockUSDT(address(asset)).mint(address(this), premium);
-            
-            // Then transfer to pool using standard flow
-            asset.approve(address(pool), premium);
-            pool.collectPremium(policyId, premium);
-            
-            // Refund excess BNB if any
+            // Refund excess
             if (msg.value > premium) {
                 (bool success, ) = msg.sender.call{value: msg.value - premium}("");
                 require(success, "BNB refund failed");
@@ -171,8 +198,6 @@ contract PolicyManager is IPolicyManager, ERC721, ReentrancyGuard {
             asset.approve(address(pool), premium);
             pool.collectPremium(policyId, premium);
         }
-
-        emit PolicyCreated(policyId, holder, marketId, coverageAmount, premium);
     }
 
     // Track user predictions for payout verification
