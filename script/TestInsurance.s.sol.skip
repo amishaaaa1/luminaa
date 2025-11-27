@@ -1,0 +1,116 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.24;
+
+import {Script} from "forge-std/Script.sol";
+import {console} from "forge-std/console.sol";
+import {PolicyManager} from "../src/PolicyManager.sol";
+import {InsurancePool} from "../src/InsurancePool.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+
+/**
+ * @title TestInsurance
+ * @notice Test script to verify insurance purchase flow
+ */
+contract TestInsurance is Script {
+    address constant POLICY_MANAGER = 0xc03fc0366d91ea1e3eb0f92bcc20c78f988d370c;
+    address constant INSURANCE_POOL = 0x73b988b8308e50f515ea25f4673070eb480889c1;
+    address constant USDT = 0x337610d27c682E347C9cD60BD4b3b107C9d34dDd;
+
+    function run() external {
+        uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
+        address deployer = vm.addr(deployerPrivateKey);
+        
+        console.log("=== Testing Insurance Purchase ===");
+        console.log("Deployer:", deployer);
+        console.log("PolicyManager:", POLICY_MANAGER);
+        console.log("USDT:", USDT);
+        
+        PolicyManager policyManager = PolicyManager(POLICY_MANAGER);
+        InsurancePool pool = InsurancePool(INSURANCE_POOL);
+        IERC20 usdt = IERC20(USDT);
+        
+        // Check balances
+        uint256 usdtBalance = usdt.balanceOf(deployer);
+        console.log("\nUSDT Balance:", usdtBalance / 1e18, "USDT");
+        
+        if (usdtBalance == 0) {
+            console.log("ERROR: No USDT balance!");
+            return;
+        }
+        
+        // Check pool info
+        InsurancePool.PoolInfo memory poolInfo = pool.getPoolInfo();
+        console.log("\nPool Info:");
+        console.log("- Total Liquidity:", poolInfo.totalLiquidity / 1e18, "USDT");
+        console.log("- Available:", poolInfo.availableLiquidity / 1e18, "USDT");
+        console.log("- Active:", poolInfo.isActive);
+        
+        if (!poolInfo.isActive) {
+            console.log("ERROR: Pool not active!");
+            return;
+        }
+        
+        if (poolInfo.availableLiquidity == 0) {
+            console.log("ERROR: Pool has no liquidity!");
+            console.log("Need to deposit to pool first");
+            return;
+        }
+        
+        // Test parameters
+        string memory marketId = "1";
+        uint256 coverageAmount = 1 ether; // 1 USDT
+        uint256 duration = 30 days;
+        
+        console.log("\nTest Parameters:");
+        console.log("- Market ID:", marketId);
+        console.log("- Coverage:", coverageAmount / 1e18, "USDT");
+        console.log("- Duration:", duration / 86400, "days");
+        
+        // Calculate premium
+        uint256 premium = policyManager.calculatePremium(marketId, coverageAmount);
+        console.log("- Premium:", premium / 1e18, "USDT");
+        console.log("- Premium Rate:", (premium * 10000 / coverageAmount) / 100, "%");
+        
+        if (premium == 0) {
+            console.log("ERROR: Premium is 0!");
+            return;
+        }
+        
+        if (premium > usdtBalance) {
+            console.log("ERROR: Insufficient USDT for premium!");
+            return;
+        }
+        
+        vm.startBroadcast(deployerPrivateKey);
+        
+        // Step 1: Approve premium
+        console.log("\nStep 1: Approving premium...");
+        usdt.approve(POLICY_MANAGER, premium);
+        console.log("Approved:", premium / 1e18, "USDT");
+        
+        // Step 2: Create policy
+        console.log("\nStep 2: Creating policy...");
+        uint256 policyId = policyManager.createPolicy(
+            deployer,
+            marketId,
+            coverageAmount,
+            premium,
+            duration
+        );
+        
+        console.log("SUCCESS! Policy ID:", policyId);
+        
+        // Verify policy
+        PolicyManager.Policy memory policy = policyManager.getPolicy(policyId);
+        console.log("\nPolicy Details:");
+        console.log("- Holder:", policy.holder);
+        console.log("- Market:", policy.marketId);
+        console.log("- Coverage:", policy.coverageAmount / 1e18, "USDT");
+        console.log("- Premium:", policy.premium / 1e18, "USDT");
+        console.log("- Status:", uint(policy.status));
+        
+        vm.stopBroadcast();
+        
+        console.log("\n=== Test Complete ===");
+    }
+}

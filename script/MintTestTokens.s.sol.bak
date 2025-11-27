@@ -1,0 +1,63 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.24;
+
+import {Script} from "forge-std/Script.sol";
+import {console} from "forge-std/console.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+
+/**
+ * @title MintTestTokens
+ * @notice Script to mint test USDT tokens for testing insurance purchases
+ * @dev Run with: forge script script/MintTestTokens.s.sol --rpc-url $BNB_TESTNET_RPC --broadcast
+ */
+contract MintTestTokens is Script {
+    // Test USDT token address
+    address constant USDT = 0x337610d27c682E347C9cD60BD4b3b107C9d34dDd;
+    
+    // Amount to mint (1000 USDT)
+    uint256 constant MINT_AMOUNT = 1000 ether;
+
+    function run() external {
+        uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
+        address deployer = vm.addr(deployerPrivateKey);
+        
+        console.log("Deployer:", deployer);
+        console.log("USDT Token:", USDT);
+        console.log("Mint Amount:", MINT_AMOUNT / 1e18, "USDT");
+        
+        vm.startBroadcast(deployerPrivateKey);
+        
+        // Check if token has mint function
+        // If your USDT is a standard ERC20 without mint, you'll need to transfer from deployer
+        
+        // Option 1: If token has mint function (uncomment if available)
+        // IMintable(USDT).mint(deployer, MINT_AMOUNT);
+        
+        // Option 2: Transfer from deployer to test addresses
+        IERC20 usdt = IERC20(USDT);
+        uint256 balance = usdt.balanceOf(deployer);
+        console.log("Deployer USDT Balance:", balance / 1e18);
+        
+        // Add test addresses here
+        address[] memory testAddresses = new address[](3);
+        testAddresses[0] = 0xYourTestAddress1; // Replace with your MetaMask address
+        testAddresses[1] = 0xYourTestAddress2; // Replace with another test address
+        testAddresses[2] = 0xYourTestAddress3; // Replace with another test address
+        
+        for (uint i = 0; i < testAddresses.length; i++) {
+            if (testAddresses[i] != address(0)) {
+                usdt.transfer(testAddresses[i], 100 ether); // 100 USDT each
+                console.log("Transferred 100 USDT to:", testAddresses[i]);
+            }
+        }
+        
+        vm.stopBroadcast();
+        
+        console.log("\n=== Mint Complete ===");
+        console.log("Test addresses now have USDT for insurance testing");
+    }
+}
+
+interface IMintable {
+    function mint(address to, uint256 amount) external;
+}

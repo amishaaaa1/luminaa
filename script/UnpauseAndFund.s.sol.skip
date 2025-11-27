@@ -1,0 +1,86 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.24;
+
+import {Script} from "forge-std/Script.sol";
+import {console} from "forge-std/console.sol";
+import {PolicyManager} from "../src/PolicyManager.sol";
+import {InsurancePool} from "../src/InsurancePool.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+
+contract UnpauseAndFund is Script {
+    function run() external {
+        uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
+        address policyManagerAddr = vm.envAddress("POLICY_MANAGER_ADDRESS");
+        address poolAddr = vm.envAddress("INSURANCE_POOL_ADDRESS");
+        address assetToken = vm.envAddress("ASSET_TOKEN");
+
+        vm.startBroadcast(deployerPrivateKey);
+
+        PolicyManager policyManager = PolicyManager(policyManagerAddr);
+        InsurancePool pool = InsurancePool(poolAddr);
+        IERC20 usdt = IERC20(assetToken);
+
+        console.log("=== Checking Contract Status ===");
+        
+        // Check if paused
+        bool isPaused = policyManager.paused();
+        console.log("PolicyManager paused:", isPaused);
+        
+        if (isPaused) {
+            console.log("Unpausing PolicyManager...");
+            pool.emergencyUnpause();
+            console.log("PolicyManager unpaused!");
+        }
+
+        // Check pool status
+        (
+            uint256 totalLiquidity,
+            uint256 availableLiquidity,
+            ,
+            ,
+            ,
+            bool isActive
+        ) = pool.getPoolInfo();
+        
+        console.log("Pool active:", isActive);
+        console.log("Total liquidity:", totalLiquidity / 1e18, "USDT");
+        console.log("Available liquidity:", availableLiquidity / 1e18, "USDT");
+
+        // If pool has no liquidity, add some
+        if (totalLiquidity == 0) {
+            console.log("\n=== Adding Initial Liquidity ===");
+            uint256 depositAmount = 1000 * 1e18; // 1000 USDT
+            
+            uint256 balance = usdt.balanceOf(msg.sender);
+            console.log("Deployer USDT balance:", balance / 1e18, "USDT");
+            
+            if (balance >= depositAmount) {
+                console.log("Approving USDT...");
+                usdt.approve(poolAddr, depositAmount);
+                
+                console.log("Depositing", depositAmount / 1e18, "USDT to pool...");
+                pool.deposit(depositAmount);
+                
+                console.log("Deposit successful!");
+                
+                // Check new balance
+                (totalLiquidity, availableLiquidity, , , , ) = pool.getPoolInfo();
+                console.log("New total liquidity:", totalLiquidity / 1e18, "USDT");
+            } else {
+                console.log("WARNING: Not enough USDT balance to deposit!");
+                console.log("Please get USDT from faucet first");
+            }
+        }
+
+        vm.stopBroadcast();
+
+        console.log("\n=== Status Summary ===");
+        console.log("PolicyManager:", policyManagerAddr);
+        console.log("InsurancePool:", poolAddr);
+        console.log("Paused:", policyManager.paused());
+        (totalLiquidity, , , , , isActive) = pool.getPoolInfo();
+        console.log("Pool Active:", isActive);
+        console.log("Pool Liquidity:", totalLiquidity / 1e18, "USDT");
+        console.log("\nReady for insurance purchases!");
+    }
+}

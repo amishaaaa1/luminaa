@@ -47,12 +47,12 @@ contract DeployPredictions is Script {
             "Arbitrum Bridge"
         ];
         
-        IPredictionMarket.RiskType[5] memory riskTypes = [
-            IPredictionMarket.RiskType.Exploit,
-            IPredictionMarket.RiskType.Hack,
-            IPredictionMarket.RiskType.Depeg,
-            IPredictionMarket.RiskType.Depeg,
-            IPredictionMarket.RiskType.Hack
+        PredictionMarket.RiskType[5] memory riskTypes = [
+            PredictionMarket.RiskType.Exploit,
+            PredictionMarket.RiskType.Hack,
+            PredictionMarket.RiskType.Depeg,
+            PredictionMarket.RiskType.Depeg,
+            PredictionMarket.RiskType.Hack
         ];
         
         for (uint i = 0; i < 5; i++) {

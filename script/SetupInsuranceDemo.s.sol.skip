@@ -1,0 +1,122 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.24;
+
+import {Script} from "forge-std/Script.sol";
+import {console} from "forge-std/console.sol";
+import {InsurancePool} from "../src/InsurancePool.sol";
+import {PolicyManager} from "../src/PolicyManager.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+
+/**
+ * @title SetupInsuranceDemo
+ * @notice One-click setup for insurance demo - unpause, fund pool, distribute tokens
+ * @dev Run: forge script script/SetupInsuranceDemo.s.sol --rpc-url $BNB_TESTNET_RPC --broadcast -vvvv
+ */
+contract SetupInsuranceDemo is Script {
+    function run() external {
+        uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
+        address poolAddr = vm.envAddress("INSURANCE_POOL_ADDRESS");
+        address policyManagerAddr = vm.envAddress("POLICY_MANAGER_ADDRESS");
+        address assetToken = vm.envAddress("ASSET_TOKEN");
+
+        vm.startBroadcast(deployerPrivateKey);
+
+        InsurancePool pool = InsurancePool(poolAddr);
+        PolicyManager policyManager = PolicyManager(policyManagerAddr);
+        IERC20 usdt = IERC20(assetToken);
+
+        console.log("========================================");
+        console.log("   LUMINA INSURANCE DEMO SETUP");
+        console.log("========================================");
+        console.log("Deployer:", msg.sender);
+        console.log("Pool:", poolAddr);
+        console.log("PolicyManager:", policyManagerAddr);
+        console.log("USDT:", assetToken);
+        console.log("");
+
+        // STEP 1: Unpause contracts
+        console.log("[STEP 1/3] Checking pause status...");
+        bool isPaused = policyManager.paused();
+        if (isPaused) {
+            console.log("  -> Contracts are PAUSED");
+            console.log("  -> Unpausing...");
+            pool.emergencyUnpause();
+            console.log("  -> SUCCESS: Contracts unpaused!");
+        } else {
+            console.log("  -> Already unpaused");
+        }
+        console.log("");
+
+        // STEP 2: Check and fund pool
+        console.log("[STEP 2/3] Setting up pool liquidity...");
+        (
+            uint256 totalLiquidity,
+            uint256 availableLiquidity,
+            ,
+            ,
+            ,
+            bool isActive
+        ) = pool.getPoolInfo();
+        
+        console.log("  -> Pool active:", isActive);
+        console.log("  -> Current liquidity:", totalLiquidity / 1e18, "USDT");
+        
+        uint256 deployerBalance = usdt.balanceOf(msg.sender);
+        console.log("  -> Your USDT balance:", deployerBalance / 1e18, "USDT");
+
+        // If pool needs more liquidity
+        uint256 targetLiquidity = 10000 * 1e18; // 10,000 USDT target
+        if (totalLiquidity < targetLiquidity && deployerBalance > 0) {
+            uint256 depositAmount = deployerBalance;
+            
+            console.log("  -> Depositing", depositAmount / 1e18, "USDT to pool...");
+            usdt.approve(poolAddr, depositAmount);
+            pool.deposit(depositAmount);
+            
+            (totalLiquidity, , , , , ) = pool.getPoolInfo();
+            console.log("  -> SUCCESS: Pool now has", totalLiquidity / 1e18, "USDT");
+        } else if (totalLiquidity >= targetLiquidity) {
+            console.log("  -> Pool already has sufficient liquidity");
+        } else {
+            console.log("  -> WARNING: No USDT to deposit!");
+            console.log("  -> You need to get USDT tokens first");
+        }
+        console.log("");
+
+        // STEP 3: Summary
+        console.log("[STEP 3/3] Final status check...");
+        isPaused = policyManager.paused();
+        (totalLiquidity, availableLiquidity, , , , isActive) = pool.getPoolInfo();
+        
+        console.log("  -> Paused:", isPaused ? "YES (BAD)" : "NO (GOOD)");
+        console.log("  -> Pool Active:", isActive ? "YES (GOOD)" : "NO (BAD)");
+        console.log("  -> Total Liquidity:", totalLiquidity / 1e18, "USDT");
+        console.log("  -> Available:", availableLiquidity / 1e18, "USDT");
+        console.log("");
+
+        vm.stopBroadcast();
+
+        // Final verdict
+        console.log("========================================");
+        if (!isPaused && isActive && totalLiquidity > 0) {
+            console.log("   STATUS: READY FOR DEMO!");
+            console.log("========================================");
+            console.log("");
+            console.log("You can now:");
+            console.log("1. Open frontend: http://localhost:3000/insurance");
+            console.log("2. Connect MetaMask to BNB Testnet");
+            console.log("3. Click 'Buy Insurance' - should work!");
+            console.log("");
+            console.log("If you need USDT for testing:");
+            console.log("- Your address:", msg.sender);
+            console.log("- Pool has:", totalLiquidity / 1e18, "USDT available");
+        } else {
+            console.log("   STATUS: NEEDS ATTENTION");
+            console.log("========================================");
+            if (isPaused) console.log("ERROR: Contracts still paused!");
+            if (!isActive) console.log("ERROR: Pool not active!");
+            if (totalLiquidity == 0) console.log("ERROR: Pool has no liquidity!");
+        }
+        console.log("");
+    }
+}

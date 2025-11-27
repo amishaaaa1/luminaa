@@ -57,7 +57,7 @@ contract DeployScript is Script {
         console.log("PolicyManager:", address(policyManager));
         console.log("PredictionMarket:", address(predictionMarket));
         console.log("Asset Token:", assetToken);
-        console.log("\n✅ All contracts deployed successfully!");
+        console.log("\nAll contracts deployed successfully!");
         console.log("\nNext steps:");
         console.log("1. Update frontend/.env:");
         console.log("   NEXT_PUBLIC_ORACLE_ADDRESS=", address(oracle));

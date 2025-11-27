@@ -416,7 +416,6 @@ contract LuminaOracle is ILuminaOracle, Ownable {
         
         return (baseRisk, confidenceScore, block.timestamp);
     }
-}
 
     /**
      * @notice Assess protocol risk (simplified version for prediction markets)
@@ -428,3 +427,4 @@ contract LuminaOracle is ILuminaOracle, Ownable {
         // Convert from 0-10000 scale to 0-100 scale
         return riskScore / 100;
     }
+}

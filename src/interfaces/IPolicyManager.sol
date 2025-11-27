@@ -43,7 +43,7 @@ interface IPolicyManager {
         uint256 coverageAmount,
         uint256 premium,
         uint256 duration
-    ) external returns (uint256 policyId);
+    ) external payable returns (uint256 policyId);
 
     function claimPolicy(uint256 policyId) external returns (uint256 payout);
     function expirePolicy(uint256 policyId) external;

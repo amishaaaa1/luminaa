@@ -56,6 +56,12 @@ contract InsurancePool is IInsurancePool, ReentrancyGuard {
         paused = false;
     }
     
+    // Receive BNB payments from PolicyManager
+    receive() external payable {
+        require(msg.sender == policyManager, "Only from PolicyManager");
+        // BNB received, will be converted to USDT by pool manager
+    }
+    
     function emergencyPause() external onlyOwner {
         paused = true;
         poolInfo.isActive = false;
@@ -132,6 +138,20 @@ contract InsurancePool is IInsurancePool, ReentrancyGuard {
         poolInfo.availableLiquidity += amount;
 
         asset.safeTransferFrom(msg.sender, address(this), amount);
+
+        emit PremiumCollected(policyId, amount);
+    }
+
+    // For BNB payments where USDT is minted directly to pool
+    function collectPremiumDirect(uint256 policyId, uint256 amount) external onlyPolicyManager whenNotPaused {
+        if (amount == 0) revert("Zero premium");
+
+        // Premiums increase pool value, benefiting all LPs
+        poolInfo.totalPremiums += amount;
+        poolInfo.totalLiquidity += amount;
+        poolInfo.availableLiquidity += amount;
+
+        // No transfer needed - USDT already minted to this contract
 
         emit PremiumCollected(policyId, amount);
     }

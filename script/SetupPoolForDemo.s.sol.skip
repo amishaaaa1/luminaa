@@ -1,0 +1,127 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.24;
+
+import {Script} from "forge-std/Script.sol";
+import {console} from "forge-std/console.sol";
+import {InsurancePool} from "../src/InsurancePool.sol";
+import {PolicyManager} from "../src/PolicyManager.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+
+// Mock USDT interface with mint function
+interface IMockUSDT is IERC20 {
+    function mint(address to, uint256 amount) external;
+}
+
+contract SetupPoolForDemo is Script {
+    // Contract addresses from .env
+    address constant POOL_ADDRESS = 0x73B988b8308e50f515EA25f4673070eB480889C1;
+    address constant POLICY_MANAGER_ADDRESS = 0xc03fc0366D91Ea1E3Eb0F92bcc20C78F988D370C;
+    address constant USDT_ADDRESS = 0x337610d27c682E347C9cD60BD4b3b107C9d34dDd;
+    
+    function run() external {
+        uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
+        address deployer = vm.addr(deployerPrivateKey);
+        
+        console.log("=== Setup Pool for Demo ===");
+        console.log("Deployer:", deployer);
+        console.log("");
+        
+        vm.startBroadcast(deployerPrivateKey);
+        
+        // Get contracts
+        InsurancePool pool = InsurancePool(POOL_ADDRESS);
+        PolicyManager policyManager = PolicyManager(POLICY_MANAGER_ADDRESS);
+        IMockUSDT usdt = IMockUSDT(USDT_ADDRESS);
+        
+        // Step 1: Check if pool is paused
+        console.log("Step 1: Checking pool status...");
+        bool isPaused = pool.paused();
+        console.log("Pool paused:", isPaused);
+        
+        if (isPaused) {
+            console.log("Unpausing pool...");
+            pool.emergencyUnpause();
+            console.log("Pool unpaused!");
+        }
+        
+        // Step 2: Check PolicyManager pause status
+        console.log("");
+        console.log("Step 2: Checking PolicyManager status...");
+        bool isPMPaused = policyManager.paused();
+        console.log("PolicyManager paused:", isPMPaused);
+        
+        if (isPMPaused) {
+            console.log("Unpausing PolicyManager...");
+            policyManager.unpause();
+            console.log("PolicyManager unpaused!");
+        }
+        
+        // Step 3: Mint USDT to deployer
+        console.log("");
+        console.log("Step 3: Minting USDT...");
+        uint256 mintAmount = 100000 * 1e18; // 100k USDT
+        
+        try usdt.mint(deployer, mintAmount) {
+            console.log("Minted 100,000 USDT to deployer");
+        } catch {
+            console.log("Cannot mint (not a mock token or not owner)");
+            console.log("Using existing balance...");
+        }
+        
+        uint256 balance = usdt.balanceOf(deployer);
+        console.log("Deployer USDT balance:", balance / 1e18, "USDT");
+        
+        // Step 4: Deposit to pool
+        console.log("");
+        console.log("Step 4: Depositing to pool...");
+        
+        uint256 depositAmount = 50000 * 1e18; // 50k USDT
+        
+        if (balance < depositAmount) {
+            console.log("WARNING: Insufficient balance!");
+            console.log("Required:", depositAmount / 1e18, "USDT");
+            console.log("Available:", balance / 1e18, "USDT");
+            depositAmount = balance; // Use all available
+        }
+        
+        if (depositAmount > 0) {
+            // Approve
+            console.log("Approving", depositAmount / 1e18, "USDT...");
+            usdt.approve(POOL_ADDRESS, depositAmount);
+            
+            // Deposit
+            console.log("Depositing to pool...");
+            pool.deposit(depositAmount);
+            console.log("Deposited", depositAmount / 1e18, "USDT to pool!");
+        }
+        
+        // Step 5: Verify setup
+        console.log("");
+        console.log("=== Verification ===");
+        
+        (
+            uint256 totalLiquidity,
+            uint256 availableLiquidity,
+            ,
+            ,
+            ,
+            bool isActive
+        ) = pool.getPoolInfo();
+        
+        console.log("Pool Status:");
+        console.log("- Active:", isActive);
+        console.log("- Paused:", pool.paused());
+        console.log("- Total Liquidity:", totalLiquidity / 1e18, "USDT");
+        console.log("- Available:", availableLiquidity / 1e18, "USDT");
+        
+        console.log("");
+        console.log("PolicyManager Status:");
+        console.log("- Paused:", policyManager.paused());
+        
+        console.log("");
+        console.log("=== Setup Complete! ===");
+        console.log("Pool is ready for insurance purchases!");
+        
+        vm.stopBroadcast();
+    }
+}

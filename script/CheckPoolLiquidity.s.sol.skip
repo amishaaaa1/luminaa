@@ -1,0 +1,85 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.24;
+
+import {Script} from "forge-std/Script.sol";
+import {console} from "forge-std/console.sol";
+import {InsurancePool} from "../src/InsurancePool.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+
+/**
+ * @title CheckPoolLiquidity
+ * @notice Check if pool has liquidity and deposit if needed
+ */
+contract CheckPoolLiquidity is Script {
+    address constant INSURANCE_POOL = 0x73b988b8308e50f515ea25f4673070eb480889c1;
+    address constant USDT = 0x337610d27c682E347C9cD60BD4b3b107C9d34dDd;
+
+    function run() external {
+        uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
+        address deployer = vm.addr(deployerPrivateKey);
+        
+        console.log("=== Checking Pool Liquidity ===");
+        console.log("Pool:", INSURANCE_POOL);
+        console.log("Deployer:", deployer);
+        
+        InsurancePool pool = InsurancePool(INSURANCE_POOL);
+        IERC20 usdt = IERC20(USDT);
+        
+        // Check pool info
+        InsurancePool.PoolInfo memory poolInfo = pool.getPoolInfo();
+        console.log("\nCurrent Pool Status:");
+        console.log("- Total Liquidity:", poolInfo.totalLiquidity / 1e18, "USDT");
+        console.log("- Available:", poolInfo.availableLiquidity / 1e18, "USDT");
+        console.log("- Total Premiums:", poolInfo.totalPremiums / 1e18, "USDT");
+        console.log("- Total Claims:", poolInfo.totalClaims / 1e18, "USDT");
+        console.log("- Utilization:", poolInfo.utilizationRate / 100, "%");
+        console.log("- Active:", poolInfo.isActive);
+        
+        if (poolInfo.totalLiquidity == 0) {
+            console.log("\nWARNING: Pool has NO liquidity!");
+            console.log("Insurance purchases will FAIL without liquidity");
+            
+            // Check deployer USDT balance
+            uint256 balance = usdt.balanceOf(deployer);
+            console.log("\nDeployer USDT Balance:", balance / 1e18, "USDT");
+            
+            if (balance > 0) {
+                console.log("\nDepositing to pool...");
+                
+                uint256 depositAmount = 10000 ether; // 10,000 USDT
+                if (balance < depositAmount) {
+                    depositAmount = balance / 2; // Deposit half
+                }
+                
+                vm.startBroadcast(deployerPrivateKey);
+                
+                // Approve
+                usdt.approve(INSURANCE_POOL, depositAmount);
+                console.log("Approved:", depositAmount / 1e18, "USDT");
+                
+                // Deposit
+                uint256 shares = pool.deposit(depositAmount);
+                console.log("Deposited:", depositAmount / 1e18, "USDT");
+                console.log("Received shares:", shares / 1e18);
+                
+                vm.stopBroadcast();
+                
+                // Check again
+                poolInfo = pool.getPoolInfo();
+                console.log("\nUpdated Pool Status:");
+                console.log("- Total Liquidity:", poolInfo.totalLiquidity / 1e18, "USDT");
+                console.log("- Available:", poolInfo.availableLiquidity / 1e18, "USDT");
+                console.log("- Active:", poolInfo.isActive);
+                
+                console.log("\nSUCCESS! Pool now has liquidity");
+            } else {
+                console.log("\nERROR: Deployer has no USDT to deposit!");
+            }
+        } else {
+            console.log("\nPool has sufficient liquidity");
+            console.log("Insurance purchases should work");
+        }
+        
+        console.log("\n=== Check Complete ===");
+    }
+}

@@ -10,6 +10,11 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
+// Interface for MockUSDT minting (testnet only)
+interface IMockUSDT {
+    function mint(address to, uint256 amount) external;
+}
+
 /// @title PolicyManager - Insurance policy issuance and claims
 /// @author Lumina Protocol
 /// @notice Each policy is an ERC-721 NFT. Holders can claim if market resolves against them.
@@ -83,7 +88,7 @@ contract PolicyManager is IPolicyManager, ERC721, ReentrancyGuard {
         uint256 coverageAmount,
         uint256 premium,
         uint256 duration
-    ) external nonReentrant whenNotPaused returns (uint256 policyId) {
+    ) external payable nonReentrant whenNotPaused returns (uint256 policyId) {
         if (holder == address(0)) revert("Invalid holder");
         if (bytes(marketId).length == 0) revert("Need market ID");
         if (coverageAmount < MIN_COVERAGE || coverageAmount > MAX_COVERAGE) {
@@ -139,12 +144,47 @@ contract PolicyManager is IPolicyManager, ERC721, ReentrancyGuard {
         // Mint policy NFT
         _safeMint(holder, policyId);
 
-        // Transfer premium to pool
-        asset.safeTransferFrom(msg.sender, address(this), premium);
-        asset.approve(address(pool), premium);
-        pool.collectPremium(policyId, premium);
+        // Handle payment: BNB or USDT
+        if (msg.value > 0) {
+            // BNB payment (TESTNET ONLY)
+            // Verify BNB amount is sufficient
+            require(msg.value >= premium, "Insufficient BNB sent");
+            
+            // Accept BNB and mint equivalent USDT for the pool
+            // This works because MockUSDT has a public mint function
+            
+            // Mint USDT to this contract first
+            IMockUSDT(address(asset)).mint(address(this), premium);
+            
+            // Then transfer to pool using standard flow
+            asset.approve(address(pool), premium);
+            pool.collectPremium(policyId, premium);
+            
+            // Refund excess BNB if any
+            if (msg.value > premium) {
+                (bool success, ) = msg.sender.call{value: msg.value - premium}("");
+                require(success, "BNB refund failed");
+            }
+        } else {
+            // USDT payment
+            asset.safeTransferFrom(msg.sender, address(this), premium);
+            asset.approve(address(pool), premium);
+            pool.collectPremium(policyId, premium);
+        }
 
         emit PolicyCreated(policyId, holder, marketId, coverageAmount, premium);
+    }
+
+    // Track user predictions for payout verification
+    mapping(uint256 => mapping(address => bool)) private userPredictions; // policyId => user => prediction (true=Yes, false=No)
+    
+    /**
+     * @notice Record user's prediction when creating policy
+     * @dev This should be called by prediction market contract
+     */
+    function recordPrediction(uint256 policyId, address user, bool prediction) external {
+        require(policies[policyId].holder == user, "Not policy holder");
+        userPredictions[policyId][user] = prediction;
     }
 
     function claimPolicy(uint256 policyId) external nonReentrant whenNotPaused returns (uint256 payout) {
@@ -160,11 +200,13 @@ contract PolicyManager is IPolicyManager, ERC721, ReentrancyGuard {
         ILuminaOracle.MarketOutcome memory outcome = oracle.getMarketOutcome(policy.marketId);
         if (!outcome.isResolved) revert("Market not resolved yet");
 
-        // CRITICAL FIX: Verify user actually LOST the prediction
+        // ✅ CRITICAL FIX: Verify user actually LOST the prediction
         // Insurance only pays if user's prediction was WRONG
-        // This prevents users from claiming when they won
-        // NOTE: In production, this should verify against actual prediction market position
-        // For now, we assume policy holder predicted opposite of outcome
+        bool userPrediction = userPredictions[policyId][msg.sender];
+        bool actualOutcome = uint8(outcome.outcomeHash[0]) > 127; // true = Yes, false = No
+        
+        // User can only claim if they predicted WRONG
+        require(userPrediction != actualOutcome, "You won! No insurance payout for winners");
         
         // Mark as claimed
         policy.status = PolicyStatus.Claimed;
@@ -180,7 +222,7 @@ contract PolicyManager is IPolicyManager, ERC721, ReentrancyGuard {
         marketExposure[policy.marketId] -= policy.coverageAmount;
         userTotalCoverage[msg.sender] -= policy.coverageAmount;
 
-        pool.payClaim(policyId, msg.sender, payout);
+        pool.payClaim{gas: 300000}(policyId, msg.sender, payout); // ✅ Gas limit added
 
         emit PolicyClaimed(policyId, payout);
     }

@@ -1,0 +1,94 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.24;
+
+import {Script} from "forge-std/Script.sol";
+import {console} from "forge-std/console.sol";
+import {InsurancePool} from "../src/InsurancePool.sol";
+import {PolicyManager} from "../src/PolicyManager.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+
+/**
+ * @title FundPoolSimple
+ * @notice Simple script to fund insurance pool with mock liquidity
+ * @dev Run: forge script script/FundPoolSimple.s.sol --rpc-url $BNB_TESTNET_RPC --broadcast
+ */
+contract FundPoolSimple is Script {
+    function run() external {
+        uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
+        address poolAddr = vm.envAddress("INSURANCE_POOL_ADDRESS");
+        address policyManagerAddr = vm.envAddress("POLICY_MANAGER_ADDRESS");
+        address assetToken = vm.envAddress("ASSET_TOKEN");
+
+        vm.startBroadcast(deployerPrivateKey);
+
+        InsurancePool pool = InsurancePool(poolAddr);
+        PolicyManager policyManager = PolicyManager(policyManagerAddr);
+        IERC20 usdt = IERC20(assetToken);
+
+        console.log("=== Fund Pool Script ===");
+        console.log("Pool Address:", poolAddr);
+        console.log("Asset Token:", assetToken);
+        console.log("Deployer:", msg.sender);
+
+        // 1. Unpause if needed
+        bool isPaused = policyManager.paused();
+        if (isPaused) {
+            console.log("\n[1/4] Unpausing contracts...");
+            pool.emergencyUnpause();
+            console.log("  -> Unpaused!");
+        } else {
+            console.log("\n[1/4] Contracts already unpaused");
+        }
+
+        // 2. Check current pool status
+        console.log("\n[2/4] Checking pool status...");
+        (
+            uint256 totalLiquidity,
+            uint256 availableLiquidity,
+            ,
+            ,
+            ,
+            bool isActive
+        ) = pool.getPoolInfo();
+        
+        console.log("  -> Active:", isActive);
+        console.log("  -> Total Liquidity:", totalLiquidity / 1e18, "USDT");
+        console.log("  -> Available:", availableLiquidity / 1e18, "USDT");
+
+        // 3. Check deployer balance
+        console.log("\n[3/4] Checking USDT balance...");
+        uint256 balance = usdt.balanceOf(msg.sender);
+        console.log("  -> Your balance:", balance / 1e18, "USDT");
+
+        // 4. Deposit to pool
+        if (balance > 0) {
+            console.log("\n[4/4] Depositing to pool...");
+            
+            // Deposit all available USDT
+            uint256 depositAmount = balance;
+            
+            console.log("  -> Approving", depositAmount / 1e18, "USDT...");
+            usdt.approve(poolAddr, depositAmount);
+            
+            console.log("  -> Depositing...");
+            pool.deposit(depositAmount);
+            
+            console.log("  -> SUCCESS! Deposited", depositAmount / 1e18, "USDT");
+            
+            // Show new balance
+            (totalLiquidity, availableLiquidity, , , , ) = pool.getPoolInfo();
+            console.log("\n=== New Pool Status ===");
+            console.log("Total Liquidity:", totalLiquidity / 1e18, "USDT");
+            console.log("Available:", availableLiquidity / 1e18, "USDT");
+        } else {
+            console.log("\n[4/4] SKIPPED - No USDT balance");
+            console.log("\nWARNING: You need USDT tokens first!");
+            console.log("Run: forge script script/MintTestTokens.s.sol --rpc-url $BNB_TESTNET_RPC --broadcast");
+        }
+
+        vm.stopBroadcast();
+
+        console.log("\n=== DONE ===");
+        console.log("Pool is ready for insurance purchases!");
+    }
+}

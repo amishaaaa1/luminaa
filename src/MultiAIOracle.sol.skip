@@ -9,7 +9,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
  * @dev Supports 5 AI providers with 80% consensus requirement
  */
 contract MultiAIOracle is Ownable {
-    
+
     enum AIProvider {
         Gemini,      // Google AI Studio
         Llama,       // Groq
@@ -37,27 +37,27 @@ contract MultiAIOracle is Ownable {
     // Market ID => AI Provider => Response
     mapping(uint256 => mapping(AIProvider => AIResponse)) public responses;
     mapping(uint256 => ConsensusResult) public consensusResults;
-    
+
     // Authorized backend addresses that can submit AI responses
     mapping(address => bool) public authorizedReporters;
-    
+
     uint256 public constant CONSENSUS_THRESHOLD = 80; // 80% agreement required
     uint256 public constant MIN_RESPONSES = 3; // Minimum 3 AI responses
-    
+
     event AIResponseSubmitted(
         uint256 indexed marketId,
         AIProvider provider,
         uint256 riskScore,
         uint256 confidence
     );
-    
+
     event ConsensusReached(
         uint256 indexed marketId,
         uint256 finalScore,
         uint256 agreementRate,
         uint256 respondedCount
     );
-    
+
     event ConsensusFailedRefund(
         uint256 indexed marketId,
         uint256 agreementRate
@@ -99,8 +99,8 @@ contract MultiAIOracle is Ownable {
      * @param marketId Market identifier
      * @return ConsensusResult struct with final score and agreement rate
      */
-    function calculateConsensus(uint256 marketId) 
-        external 
-        returns (ConsensusResult memory) 
+    function calculateConsensus(uint256 marketId)
+        external
+        returns (ConsensusResult memory)
     {
         require(authorizedReporters[msg.sender], "Not authorized");
